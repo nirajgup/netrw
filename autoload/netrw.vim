@@ -4905,7 +4905,7 @@ fun! s:NetrwBrowseChgDir(islocal,newdir,...)
     call remove(w:netrw_treedict,treedir)
 "    call Decho("tree-list: removed     entry<".treedir."> from treedict",'~'.expand("<slnum>"))
 "    call Decho("tree-list: yielding treedict<".string(w:netrw_treedict).">",'~'.expand("<slnum>"))
-    let dirname=treedir
+    let dirname=w:netrw_treetop
    else
     " go down one directory
     let dirname= substitute(treedir,'/*$','/','')
@@ -4957,6 +4957,55 @@ fun! s:NetrwBrowseChgDir(islocal,newdir,...)
 "  call Dret("s:NetrwBrowseChgDir <".dirname."> : curpos<".string(getpos(".")).">")
   return dirname
 endfun
+
+" ---------------------------------------------------------------------
+" s:NetrwGetCurrentPath: Returns path of currently selected item {{{2
+fun! s:NetrwGetCurrentPath(islocal,item)
+
+    if (has("win32") || has("win95") || has("win64") || has("win16"))
+	let path = substitute(b:netrw_curdir,'\\','/','ge')
+    else
+	let path = b:netrw_curdir
+    endif
+    let item    = a:item
+
+    if exists("w:netrw_liststyle") && w:netrw_liststyle == s:TREELIST && exists("w:netrw_treedict")
+	"    call Decho("edit-a-file: handle tree listing: w:netrw_treedict<".(exists("w:netrw_treedict")? string(w:netrw_treedict) : 'n/a').">",'~'.expand("<slnum>"))
+	"    call Decho("edit-a-file: newdir<".newdir.">",'~'.expand("<slnum>"))
+	let path= s:NetrwTreeDir(a:islocal)
+    endif
+
+    "  call Decho("path<".path.">",'~'.expand("<slnum>"))
+    " set up o/s-dependent directory recognition pattern
+    if has("amiga")
+	let dirpat= '[\/:]$'
+    else
+	let dirpat= '[\/]$'
+    endif
+    "  call Decho("set up o/s-dependent directory recognition pattern: path<".path.">  dirpat<".dirpat.">",'~'.expand("<slnum>"))
+
+    if path !~ dirpat
+	" apparently vim is "recognizing" that it is in a directory and
+	" is removing the trailing "/".  Bad idea, so let's put it back.
+	let path= path.'/'
+	"   call Decho("adjusting path<".path.'>  (put trailing"/"back)','~'.expand("<slnum>"))
+    endif
+
+    "  call Decho("[item<".item.">".((item =~ dirpat)?"=~" :"!~")."dirpat<".dirpat.">] && [islocal=".a:islocal."] && [item is".(isdirectory(s:NetrwFile(item))?"" :"not")."a directory]",'~'.expand("<slnum>"))
+    if item !~ dirpat && !(a:islocal && isdirectory(s:NetrwFile(s:ComposePath(path,item))))
+	" ------------------------------
+	" NetrwGetCurrentPath: File is selected {{{3
+	" ------------------------------
+
+	if path =~ '/$'
+	    let path = path.item
+	else
+	    let path = path."/".item
+	endif
+    endif
+
+	return path
+    endfun
 
 " ---------------------------------------------------------------------
 " s:NetrwBrowseUpDir: implements the "-" mappings {{{2
@@ -6178,6 +6227,7 @@ fun! s:NetrwMaps(islocal)
    nnoremap <buffer> <silent> <nowait> qf	:<c-u>call <SID>NetrwFileInfo(1,<SID>NetrwGetWord())<cr>
    nnoremap <buffer> <silent> <nowait> qF	:<c-u>call <SID>NetrwMarkFileQFEL(1,getqflist())<cr>
    nnoremap <buffer> <silent> <nowait> qL	:<c-u>call <SID>NetrwMarkFileQFEL(1,getloclist(v:count))<cr>
+   nnoremap <buffer> <silent> <nowait> qp	:<c-u>call setreg(v:register,<SID>NetrwGetCurrentPath(1,<SID>NetrwGetWord()))"<cr>
    nnoremap <buffer> <silent> <nowait> r	:<c-u>let g:netrw_sort_direction= (g:netrw_sort_direction =~# 'n')? 'r' : 'n'<bar>exe "norm! 0"<bar>call <SID>NetrwRefresh(1,<SID>NetrwBrowseChgDir(1,'./'))<cr>
    nnoremap <buffer> <silent> <nowait> s	:call <SID>NetrwSortStyle(1)<cr>
    nnoremap <buffer> <silent> <nowait> S	:<c-u>call <SID>NetSortSequence(1)<cr>
@@ -6189,7 +6239,6 @@ fun! s:NetrwMaps(islocal)
    nnoremap <buffer> <silent> <nowait> v	:call <SID>NetrwSplit(5)<cr>
    nnoremap <buffer> <silent> <nowait> x	:<c-u>call netrw#BrowseX(<SID>NetrwBrowseChgDir(1,<SID>NetrwGetWord(),0),0)"<cr>
    nnoremap <buffer> <silent> <nowait> X	:<c-u>call <SID>NetrwLocalExecute(expand("<cword>"))"<cr>
-   nnoremap <buffer> <silent> <nowait> y	:<c-u>call setreg(v:register,<SID>NetrwBrowseChgDir(1,<SID>NetrwGetWord(),0))"<cr>
 "   " local insert-mode maps
 "   inoremap <buffer> <silent> <nowait> a	<c-o>:call <SID>NetrwHide(1)<cr>
 "   inoremap <buffer> <silent> <nowait> c	<c-o>:exe "NetrwKeepj lcd ".fnameescape(b:netrw_curdir)<cr>
@@ -6363,7 +6412,6 @@ fun! s:NetrwMaps(islocal)
    nnoremap <buffer> <silent> <nowait> U	:<c-u>call <SID>NetrwBookHistHandler(5,b:netrw_curdir)<cr>
    nnoremap <buffer> <silent> <nowait> v	:call <SID>NetrwSplit(2)<cr>
    nnoremap <buffer> <silent> <nowait> x	:<c-u>call netrw#BrowseX(<SID>NetrwBrowseChgDir(0,<SID>NetrwGetWord()),1)<cr>
-   nnoremap <buffer> <silent> <nowait> y	:<c-u>call setreg(v:register,<SID>NetrwBrowseChgDir(0,<SID>NetrwGetWord(),0))"<cr>
 "   " remote insert-mode maps
 "   inoremap <buffer> <silent> <nowait> <cr>	<c-o>:call <SID>NetrwBrowse(0,<SID>NetrwBrowseChgDir(0,<SID>NetrwGetWord()))<cr>
 "   inoremap <buffer> <silent> <nowait> <c-l>	<c-o>:call <SID>NetrwRefresh(0,<SID>NetrwBrowseChgDir(0,'./'))<cr>
